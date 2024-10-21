@@ -301,3 +301,38 @@ class SocialNetwork:
             letra = string.ascii_uppercase[i]
             amigos = [string.ascii_uppercase[j] for j in self.L[i]]
             print(f"Nodo {letra}: {', '.join(amigos)}")
+
+    def load_adjacency_list(self, adjacency_list):
+        with self.driver.session() as session:
+            for node, edges in adjacency_list.items():
+                session.write_transaction(self._create_node, node)
+                for edge in edges:
+                    session.write_transaction(self._create_relationship, node, edge)
+
+    @staticmethod
+    def _create_node(tx, node):
+        tx.run("MERGE (n:Node {name: $name})", name=node)
+
+    @staticmethod
+    def _create_relationship(tx, from_node, to_node):
+        tx.run(
+            """
+            MATCH (a:Node {name: $from_node}), (b:Node {name: $to_node})
+            MERGE (a)-[:FRIEND]->(b)
+            """,
+            from_node=from_node,
+            to_node=to_node,
+        )
+
+    def read_adjacency_list_from_file(self, filepath):
+        adjacency_list = {}
+        with open(filepath, "r") as file:
+            for line in file:
+                # Eliminar espacios y saltos de línea, luego separar en base a ':'
+                parts = line.strip().split(":")
+                if len(parts) == 2:
+                    node = parts[0].strip()
+                    # Quitar espacios y comas de la lista de adyacentes
+                    edges = [edge.strip() for edge in parts[1].split(",")]
+                    adjacency_list[node] = edges
+        return adjacency_list
