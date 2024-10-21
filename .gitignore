@@ -1,0 +1,6 @@
+.venv
+Graph.py
+main.py
+Node.py
+__pycache__
+.env
