@@ -51,13 +51,10 @@ class SocialNetwork:
         result = tx.run("MATCH (p:Person) RETURN p.name AS name")
         all_nodes = [record["name"] for record in result]
 
-        # Loop a través de todos los nodos en el grafo
         for node in all_nodes:
             if node not in visited:
-                # Encontrar un nuevo grupo, incrementar el contador
                 num_groups += 1
 
-                # Realizar DFS o BFS según el flag
                 if use_dfs:
                     SocialNetwork._dfs(tx, node, visited)
                 else:
@@ -67,7 +64,7 @@ class SocialNetwork:
 
     @staticmethod
     def _dfs(tx, node, visited):
-        stack = [node]  # Inicializar stack para DFS
+        stack = [node] 
         visited.add(node)
 
         while stack:
@@ -88,7 +85,7 @@ class SocialNetwork:
     def _bfs(tx, node, visited):
         from collections import deque
 
-        queue = deque([node])  # Inicializar cola para BFS
+        queue = deque([node]) 
         visited.add(node)
 
         while queue:
@@ -118,7 +115,6 @@ class SocialNetwork:
         people = [record["person"] for record in result]
 
         for person in people:
-            # Inicializamos la lista de recomendaciones para la persona
             recommendations[person] = []
 
             # Obtener amigos de la persona actual
@@ -128,7 +124,6 @@ class SocialNetwork:
             )
             friends = {record["friend"] for record in friends_result}
 
-            # Recorremos los amigos de la persona
             for friend in friends:
                 # Obtener amigos del amigo
                 friends_of_friend_result = tx.run(
@@ -139,13 +134,10 @@ class SocialNetwork:
                     record["fof"] for record in friends_of_friend_result
                 }
 
-                # Encontrar amigos en común que no sean la persona actual ni su amigo
                 potential_friends = friends_of_friend - friends - {person}
 
-                # Agregar las recomendaciones
                 recommendations[person].extend(potential_friends)
 
-            # Eliminar duplicados en las recomendaciones
             recommendations[person] = list(set(recommendations[person]))
 
         return recommendations
@@ -225,14 +217,11 @@ class SocialNetwork:
             """
             result = session.run(query)
 
-            # Crear un grafo
             G = nx.Graph()
 
-            # Añadir los nodos y las aristas del resultado
             for record in result:
                 G.add_edge(record["person"], record["friend"])
 
-            # Dibujar el grafo
             plt.figure(figsize=(10, 8))
             nx.draw(
                 G,
@@ -245,18 +234,14 @@ class SocialNetwork:
                 edge_color="#ccbd13",
             )
 
-            # Mostrar el gráfico
             plt.title("Grafo de Red Social", size=16)
             plt.show()
 
-    # Función para agregar nodos y relaciones del grafo a Neo4j
     def add_graph_to_neo4j(self, graph):
         with self.driver.session() as session:
-            # Primero creamos los nodos
             for node in graph:
                 session.run("MERGE (n:Person {name: $name})", name=node)
 
-            # Luego, creamos las relaciones entre los nodos
             for node, friends in graph.items():
                 for friend in friends:
                     session.run(
@@ -270,14 +255,11 @@ class SocialNetwork:
 
     def crearte_adList(self, filename="lista_adyacencia.txt"):
         with self.driver.session() as session:
-            # Obtener todos los nodos
             nodos = session.run("MATCH (n) RETURN id(n) AS id")
             self.V = [record["id"] for record in nodos]
 
-            # Inicializar lista de adyacencia
             self.L = [[] for _ in range(len(self.V))]
 
-            # Obtener relaciones
             relaciones = session.run(
                 "MATCH (a)-[:FRIEND]->(b) RETURN id(a) AS a, id(b) AS b"
             )
@@ -285,14 +267,10 @@ class SocialNetwork:
             for record in relaciones:
                 a = record["a"]
                 b = record["b"]
-                self.L[a].append(b)  # Agregar b a la lista de adyacencia de a
-
-            # Exportar a archivo .txt
+                self.L[a].append(b) 
             with open(filename, "w") as file:
                 for i in range(len(self.V)):
-                    # Convertir el índice a una letra
                     letra = string.ascii_uppercase[i]
-                    # Convertir los índices de la lista de adyacencia a letras
                     amigos = [string.ascii_uppercase[j] for j in self.L[i]]
                     file.write(f"{letra}: {', '.join(amigos)}\n")
 
@@ -328,11 +306,9 @@ class SocialNetwork:
         adjacency_list = {}
         with open(filepath, "r") as file:
             for line in file:
-                # Eliminar espacios y saltos de línea, luego separar en base a ':'
                 parts = line.strip().split(":")
                 if len(parts) == 2:
                     node = parts[0].strip()
-                    # Quitar espacios y comas de la lista de adyacentes
                     edges = [edge.strip() for edge in parts[1].split(",")]
                     adjacency_list[node] = edges
         return adjacency_list

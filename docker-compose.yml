@@ -5,19 +5,17 @@ services:
     image: neo4j:latest
     container_name: neo4j
     ports:
-      - "7474:7474"   # Puerto para la interfaz web de Neo4j
-      - "7687:7687"   # Puerto para el protocolo bolt (consultas)
+      - "7474:7474"   #  interfaz web de Neo4j
+      - "7687:7687"   # Pprotocolo bolt (consultas)
     environment:
-      - NEO4J_AUTH=neo4j/passwd4 %2fdG  # Cambia el usuario y la contraseña (usuario: neo4j, contraseña: test)
+      - NEO4J_AUTH=neo4j/passwd4 %2fdG  
     volumes:
-      - neo4j_data:/data        # Volumen persistente para almacenar los datos de Neo4j
-      - neo4j_logs:/logs        # Volumen persistente para almacenar los logs de Neo4j
-      - neo4j_import:/import    # Volumen opcional para importar archivos en Neo4j
-      # - neo4j_plugins:/plugins  # Volumen para añadir plugins adicionales a Neo4j
+      - neo4j_data:/data       
+      - neo4j_logs:/logs       
+      
       
 volumes:
   neo4j_data:
   neo4j_logs:
-  neo4j_import:
-  # neo4j_plugins:
+ 
 

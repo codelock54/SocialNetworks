@@ -32,3 +32,12 @@ friends.load_adjacency_list(adjacency_list)
 
 friends.plot_friends()
 ```
+## Crear la Lista de Adyacencia
+
+```python
+import SocialNetworks
+
+friends = SocialNetworks.SocialNetwork()
+friends.crearte_adList()
+friends.print_List()
+```
