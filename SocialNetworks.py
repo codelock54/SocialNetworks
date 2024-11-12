@@ -1,6 +1,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 from neo4j import GraphDatabase
+from collections import deque
 import string
 import os
 
@@ -16,11 +17,40 @@ class SocialNetwork:
         self.driver.close()
 
     def add_friend(self, person1, person2):
+        """
+        Agrega una relación de amistad entre dos personas en la base de datos.
+
+        Esta función invoca una transacción para crear los nodos de las personas
+        si no existen y crear una relación bidireccional de amistad.
+
+        Complejidad Temporal:
+        - O(1) para ejecutar las consultas a Neo4j.
+        - Si los nodos ya existen, el tiempo de ejecución será constante.
+
+        Complejidad Espacial:
+        - O(1) para almacenar las consultas en memoria.
+        - O(n) en el peor caso si los nodos necesitan ser creados o si hay que almacenar
+          un gran número de relaciones.
+        """
         with self.driver.session() as session:
             session.write_transaction(self._add_friend_transaction, person1, person2)
 
     @staticmethod
     def _add_friend_transaction(tx, person1, person2):
+        """
+        Transacción para agregar una relación de amistad en la base de datos.
+
+        Esta transacción asegura que los nodos de las personas existan en la base de datos,
+        y luego crea una relación de amistad bidireccional entre ellas.
+
+        Complejidad Temporal:
+        - O(1) para las operaciones de lectura y escritura, ya que solo se están buscando
+          y creando nodos y relaciones de forma directa.
+
+        Complejidad Espacial:
+        - O(1) en términos de la memoria utilizada para ejecutar las consultas. Sin embargo,
+          el almacenamiento real de los nodos y las relaciones está gestionado por Neo4j.
+        """
         # Crear nodos si no existen
         tx.run("MERGE (a:Person {name: $person1})", person1=person1)
         tx.run("MERGE (b:Person {name: $person2})", person2=person2)
@@ -37,6 +67,26 @@ class SocialNetwork:
         )
 
     def find_friend_groups(self, use_dfs=True):
+        """
+        Encuentra el número de grupos de amigos (componentes conexas) en la red social.
+
+        Utiliza DFS o BFS para explorar los grupos de amigos. La elección entre DFS y BFS
+        se realiza mediante el parámetro `use_dfs`.
+
+        Complejidad Temporal:
+        - O(N + E), donde N es el número de nodos (personas) y E es el número de relaciones
+        de amistad (aristas) en la red social. El tiempo depende de la cantidad de nodos
+        y relaciones que se deben explorar.
+
+        Complejidad Espacial:
+        - O(N), ya que se necesita almacenar el conjunto de nodos visitados.
+
+        Parámetros:
+        - `use_dfs`: Booleano que determina si se utiliza DFS (True) o BFS (False).
+
+        Retorna:
+        - El número de grupos de amigos (componentes conexas).
+        """
         with self.driver.session() as session:
             return session.read_transaction(
                 self._find_friend_groups_transaction, use_dfs
@@ -44,6 +94,27 @@ class SocialNetwork:
 
     @staticmethod
     def _find_friend_groups_transaction(tx, use_dfs):
+        """
+        Transacción para encontrar los grupos de amigos en la base de datos.
+
+        Esta función se ejecuta en la base de datos de Neo4j para encontrar todos los grupos
+        de amigos, ya sea usando DFS o BFS. Un grupo de amigos es un conjunto de personas
+        que están todas conectadas entre sí directa o indirectamente.
+
+        Complejidad Temporal:
+        - O(N + E), donde N es el número de nodos (personas) y E es el número de relaciones
+        de amistad. Esto es porque se deben explorar todos los nodos y sus relaciones.
+
+        Complejidad Espacial:
+        - O(N), ya que se necesita un conjunto para almacenar los nodos visitados.
+
+        Parámetros:
+        - `tx`: Transacción en la que se ejecutan las consultas.
+        - `use_dfs`: Booleano que indica si se utiliza DFS (True) o BFS (False).
+
+        Retorna:
+        - El número de grupos de amigos encontrados.
+        """
         visited = set()
         num_groups = 0
 
@@ -64,7 +135,23 @@ class SocialNetwork:
 
     @staticmethod
     def _dfs(tx, node, visited):
-        stack = [node] 
+        """
+        Realiza una búsqueda en profundidad (DFS) para explorar los amigos de un nodo dado.
+
+        La búsqueda en profundidad explora todos los amigos de manera recursiva.
+
+        Complejidad Temporal:
+        - O(N + E), ya que se exploran todos los nodos y aristas a los que están conectados.
+
+        Complejidad Espacial:
+        - O(N), ya que la pila de recursión puede crecer hasta el tamaño de la red social.
+
+        Parámetros:
+        - `tx`: Transacción para ejecutar la consulta.
+        - `node`: Nodo inicial (persona) desde donde comienza la búsqueda.
+        - `visited`: Conjunto de nodos que ya han sido visitados.
+        """
+        stack = [node]
         visited.add(node)
 
         while stack:
@@ -83,9 +170,24 @@ class SocialNetwork:
 
     @staticmethod
     def _bfs(tx, node, visited):
-        from collections import deque
+        """
+        Realiza una búsqueda en amplitud (BFS) para explorar los amigos de un nodo dado.
 
-        queue = deque([node]) 
+        La búsqueda en amplitud explora los amigos nivel por nivel.
+
+        Complejidad Temporal:
+        - O(N + E), ya que se exploran todos los nodos y aristas a los que están conectados.
+
+        Complejidad Espacial:
+        - O(N), debido a que se necesita espacio para almacenar los nodos en la cola.
+
+        Parámetros:
+        - `tx`: Transacción para ejecutar la consulta.
+        - `node`: Nodo inicial (persona) desde donde comienza la búsqueda.
+        - `visited`: Conjunto de nodos que ya han sido visitados.
+        """
+
+        queue = deque([node])
         visited.add(node)
 
         while queue:
@@ -103,11 +205,38 @@ class SocialNetwork:
                     queue.append(neighbor)
 
     def recommend_friends(self):
+        """
+        Recomienda amigos para cada persona en la red social utilizando el concepto de amigos de amigos.
+
+        Este método genera una lista de recomendaciones para cada persona, basada en los amigos de sus amigos
+        que no sean ya amigos directos ni la persona misma.
+
+        Complejidad Temporal:
+        - O(N^2), Esto se debe a que, para cada persona, se obtiene la lista de sus amigos (O(N)), y luego para cada amigo, se obtienen los amigos de ese amigo (O(N)).
+
+        Complejidad Espacial:
+        - O(N²), ya que se necesita almacenar las recomendaciones de amigos para cada persona, y cada persona tiene como máximo N recomendaciones.
+
+        Retorna:
+        - Un diccionario con las recomendaciones de amigos para cada persona.
+        """
         with self.driver.session() as session:
             return session.read_transaction(self._recommend_friends_transaction)
 
     @staticmethod
     def _recommend_friends_transaction(tx):
+        """
+        Transacción para recomendar amigos en la base de datos.
+
+        Para cada persona, este método busca a sus amigos y a los amigos de sus amigos,
+        excluyendo a las personas que ya son sus amigos directos.
+
+        Parámetros:
+        - `tx`: Transacción para ejecutar la consulta en la base de datos.
+
+        Retorna:
+        - Un diccionario con las recomendaciones de amigos para cada persona.
+        """
         recommendations = {}
 
         # Obtener todas las personas
@@ -143,26 +272,81 @@ class SocialNetwork:
         return recommendations
 
     def most_popular_friend(self):
+        """
+        Encuentra a las personas más populares en la red social, es decir, las que tienen más amigos.
+
+        En caso de empate, retorna a todas las personas que tienen el mismo número máximo de amigos.
+
+        Complejidad Temporal:
+        - O(N), donde N es el número de personas en la red social. Se ejecuta una consulta que cuenta los amigos para cada persona.
+
+        Complejidad Espacial:
+        - O(N), ya que se almacena la lista de personas y el número de amigos en la consulta.
+
+        Retorna:
+        - Una lista de tuplas, cada una con el nombre de una persona y su número de amigos.
+        """
         with self.driver.session() as session:
             return session.read_transaction(self._most_popular_friend_transaction)
 
     @staticmethod
     def _most_popular_friend_transaction(tx):
+        """
+        Transacción para encontrar a las personas más populares en la red social (con más amigos).
+
+        Parámetros:
+        - `tx`: Transacción para ejecutar la consulta en la base de datos.
+
+        Retorna:
+        - Una lista de tuplas (persona, num_friends) con todas las personas con el mismo número máximo de amigos.
+        """
+        # Encontrar el número máximo de amigos
         result = tx.run(
             """
             MATCH (p:Person)
             RETURN p.name AS person, SIZE([(p)-[:FRIEND]->(f:Person) | f]) AS num_friends
-            ORDER BY num_friends DESC
-            LIMIT 1
             """
         )
 
-        record = result.single()
-        if record:
-            return record["person"], record["num_friends"]
-        return None, 0
+        # Recoger todos los resultados
+        friends_count = [record for record in result]
+
+        # Encontrar el número máximo de amigos
+        if not friends_count:
+            return []
+
+        max_friends = max(friends_count, key=lambda x: x["num_friends"])["num_friends"]
+
+        # Filtrar todas las personas que tienen el mismo número máximo de amigos
+        popular_friends = [
+            (record["person"], record["num_friends"])
+            for record in friends_count
+            if record["num_friends"] == max_friends
+        ]
+
+        return popular_friends
 
     def shortest_path(self, person1, person2):
+        """
+        Encuentra el camino más corto entre dos personas en la red de amigos.
+
+        Utiliza la función `shortestPath` de Cypher para encontrar el camino más corto en términos de relaciones de amistad.
+
+        Complejidad Temporal:
+        - O(N + E), donde:
+        - N es el número de personas en la red.
+        - E es el número de relaciones de amistad (aristas) en la red.
+
+        Complejidad Espacial:
+        - O(N), ya que se almacenan los nodos en el camino más corto.
+
+        Parámetros:
+        - `person1`: El nombre de la primera persona.
+        - `person2`: El nombre de la segunda persona.
+
+        Retorna:
+        - Una lista de nombres de personas en el camino más corto desde `person1` hasta `person2`, o `None` si no hay camino.
+        """
         with self.driver.session() as session:
             return session.read_transaction(
                 self._shortest_path_transaction, person1, person2
@@ -170,33 +354,154 @@ class SocialNetwork:
 
     @staticmethod
     def _shortest_path_transaction(tx, person1, person2):
-        try:
+        """
+        Transacción que busca el camino más corto entre dos personas en la base de datos usando BFS
+
+        Utiliza la función `shortestPath` de Cypher para calcular el camino más corto entre `person1` y `person2`.
+
+        Parámetros:
+        - `tx`: Transacción para ejecutar la consulta en la base de datos.
+        - `person1`: El nombre de la primera persona.
+        - `person2`: El nombre de la segunda persona.
+
+        Retorna:
+        - Una lista de nombres de personas en el camino más corto desde `person1` hasta `person2`, o `None` si no hay camino.
+        """
+        visited = set()
+        parent = (
+            {}
+        )  # Diccionario para rastrear los nodos padres (para reconstruir el camino)
+        queue = deque([person1])  # Cola para BFS, inicializada con la persona de inicio
+
+        visited.add(person1)
+
+        # Realizar BFS
+        while queue:
+            current = queue.popleft()
+
+            # Si encontramos a person2, reconstruimos el camino
+            if current == person2:
+                path = []
+                while current in parent:
+                    path.append(current)
+                    current = parent[current]
+                path.append(person1)
+                return path[::-1]  # Invertir el camino para que empiece en person1
+
+            # Obtener amigos del nodo actual
             result = tx.run(
-                "MATCH p=shortestPath((a:Person {name: $person1})-[:FRIEND*]->(b:Person {name: $person2})) RETURN [node IN nodes(p) | node.name] AS path",
-                person1=person1,
-                person2=person2,
+                "MATCH (p:Person {name: $name})-[:FRIEND]->(f) RETURN f.name AS friend",
+                name=current,
             )
-            record = result.single()
-            return record["path"] if record else None
-        except Exception as e:
-            return None
+
+            for record in result:
+                friend = record["friend"]
+                if friend not in visited:
+                    visited.add(friend)
+                    parent[friend] = current
+                    queue.append(friend)
+
+        return None
 
     def has_cycle(self):
+        """
+        Verifica si hay ciclos en la red de amigos utilizando DFS.
+
+        Complejidad Temporal:
+        - O(N + E), donde:
+        - N es el número de personas en la red.
+        - E es el número de relaciones de amistad (aristas) en la red.
+
+        Complejidad Espacial:
+        - O(N), ya que se utilizan estructuras de datos para rastrear nodos visitados y el camino actual.
+
+        Retorna:
+        - Un ciclo (lista de nodos) si se detecta, o `False` si no hay ciclos.
+        """
         with self.driver.session() as session:
             return session.read_transaction(self._has_cycle_transaction)
 
     @staticmethod
     def _has_cycle_transaction(tx):
-        result = tx.run("MATCH (n) -[*]-> (n) RETURN COUNT(*) > 0 AS has_cycle")
-        record = result.single()
-        return record["has_cycle"] if record else False
+        """
+        Transacción que utiliza DFS para detectar ciclos en la red de amigos.
+
+        Parámetros:
+        - `tx`: Transacción para ejecutar la consulta en la base de datos.
+
+        Retorna:
+        - Un ciclo (lista de nodos) si se detecta, o `False` si no hay ciclos.
+        """
+        visited = set()  # Conjunto de nodos visitados
+
+        # Obtener todos los nodos en la red social
+        result = tx.run("MATCH (p:Person) RETURN p.name AS person")
+
+        # Realizamos DFS para cada persona en la red
+        for record in result:
+            person = record["person"]
+            if person not in visited:
+                # Inicializar la pila para el DFS y el conjunto de nodos en el camino actual
+                stack = [(person, None)]  # (nodo actual, nodo padre)
+                path = []  # Pila que rastrea el camino actual para detectar ciclos
+
+                while stack:
+                    current_node, parent = stack.pop()
+                    
+                    if current_node in visited:
+                        # Si encontramos un ciclo
+                        if current_node in path:
+                            cycle_start = path.index(current_node)
+                            cycle = path[cycle_start:]
+                            cycle.append(current_node)
+                            return cycle
+                        continue
+
+                    visited.add(current_node)
+                    path.append(current_node)
+
+                    # Obtener los amigos (vecinos) del nodo actual
+                    neighbors = tx.run(
+                        "MATCH (p:Person {name: $name})-[:FRIEND]->(f) RETURN f.name AS friend",
+                        name=current_node,
+                    ).values()
+
+                    for record in neighbors:
+                        neighbor = record[0]
+                        if neighbor != parent:  # Evitar regresar al nodo padre
+                            if neighbor in visited and neighbor in path:
+                                # Detectar el ciclo si el nodo está en `path`
+                                cycle_start = path.index(neighbor)
+                                cycle = path[cycle_start:]
+                                cycle.append(neighbor)
+                                return cycle
+                            stack.append((neighbor, current_node))
+
+                # Remover el nodo del camino actual si no se encontraron ciclos
+                path.pop()
+
 
     def remove_friend(self, person1, person2):
+        """
+            Elimina la relación de amistad entre `person1` y `person2` en ambas direcciones.
+
+            Parámetros:
+            - person1 (str): Nombre de la primera persona.
+            - person2 (str): Nombre de la segunda persona.
+
+            Complejidad:
+            La complejidad de este método es O(1) en términos de la operación de eliminación específica
+            en una base de datos de grafos como Neo4j, ya que la operación DELETE en una relación específica
+            no depende del tamaño de la red, sino únicamente de la existencia de la relación entre los nodos.
+        """
         with self.driver.session() as session:
             session.write_transaction(self._remove_friend_transaction, person1, person2)
 
     @staticmethod
     def _remove_friend_transaction(tx, person1, person2):
+        """
+            Transacción para eliminar la relación de amistad entre `person1` y `person2` en ambas direcciones.
+        """
         tx.run(
             "MATCH (a:Person {name: $person1})-[r:FRIEND]->(b:Person {name: $person2}) DELETE r",
             person1=person1,
@@ -209,6 +514,19 @@ class SocialNetwork:
         )
 
     def plot_friends(self):
+        """
+            Plotea las relaciones entre amigos desde la base de datos utilizando NetworkX y Matplotlib.
+            
+            Pasos:
+            - Recupera las relaciones de amistad entre nodos de la base de datos Neo4j.
+            - Construye un grafo no dirigido con NetworkX.
+            - Plotea el grafo mostrando las conexiones de amistad.
+
+            Complejidad:
+            - Consulta de la base de datos (MATCH): O(N), donde N es el número de relaciones de amistad.
+            - Construcción del grafo en NetworkX: O(N), dado que cada relación se agrega como un borde.
+           
+        """
         with self.driver.session() as session:
             # Recuperar nodos y relaciones de la base de datos
             query = """
@@ -237,23 +555,24 @@ class SocialNetwork:
             plt.title("Grafo de Red Social", size=16)
             plt.show()
 
-    def add_graph_to_neo4j(self, graph):
-        with self.driver.session() as session:
-            for node in graph:
-                session.run("MERGE (n:Person {name: $name})", name=node)
-
-            for node, friends in graph.items():
-                for friend in friends:
-                    session.run(
-                        """
-                        MATCH (a:Person {name: $node}), (b:Person {name: $friend})
-                        MERGE (a)-[:FRIEND]->(b)
-                    """,
-                        node=node,
-                        friend=friend,
-                    )
-
-    def crearte_adList(self, filename="lista_adyacencia.txt"):
+    def create_adList(self, filename="lista_adyacencia.txt"):
+        """
+            Genera una lista de adyacencia desde la base de datos Neo4j y la guarda en un archivo de texto.
+            
+            Parámetros:
+            - filename (str): Nombre del archivo en el cual se guardará la lista de adyacencia.
+            
+            Funcionamiento:
+            - Consulta los nodos en la base de datos y construye una lista de IDs.
+            - Crea una lista de adyacencia que almacena las relaciones (amigos) de cada nodo.
+            - Guarda la lista de adyacencia en un archivo de texto en formato legible.
+            
+            Complejidad:
+            - La consulta de nodos es O(N), donde N es el número de nodos en la base de datos.
+            - La consulta de relaciones es O(E), donde E es el número de relaciones en la base de datos.
+            - El tiempo de construcción de la lista de adyacencia es O(E).
+            - La escritura en archivo es O(N + E), ya que cada nodo y relación se almacena en el archivo.
+        """
         with self.driver.session() as session:
             nodos = session.run("MATCH (n) RETURN id(n) AS id")
             self.V = [record["id"] for record in nodos]
@@ -267,7 +586,7 @@ class SocialNetwork:
             for record in relaciones:
                 a = record["a"]
                 b = record["b"]
-                self.L[a].append(b) 
+                self.L[a].append(b)
             with open(filename, "w") as file:
                 for i in range(len(self.V)):
                     letra = string.ascii_uppercase[i]
@@ -275,34 +594,40 @@ class SocialNetwork:
                     file.write(f"{letra}: {', '.join(amigos)}\n")
 
     def print_list(self):
+        """
+            Imprime la lista de adyacencia de la red social.
+            
+            Funcionamiento:
+            - Itera sobre los nodos y, para cada nodo, muestra sus amigos en un formato legible.
+            - Convierte los índices numéricos de los nodos en letras (A, B, C, etc.) para una representación más clara.
+            
+            Complejidad:
+            - O(N + E), donde N es el número de nodos y E es el número de relaciones.
+            - O(N) para iterar sobre los nodos.
+            - O(E) para acceder a las listas de amigos de cada nodo.
+        """
         for i in range(len(self.V)):
             letra = string.ascii_uppercase[i]
             amigos = [string.ascii_uppercase[j] for j in self.L[i]]
             print(f"Nodo {letra}: {', '.join(amigos)}")
 
-    def load_adjacency_list(self, adjacency_list):
-        with self.driver.session() as session:
-            for node, edges in adjacency_list.items():
-                session.write_transaction(self._create_node, node)
-                for edge in edges:
-                    session.write_transaction(self._create_relationship, node, edge)
-
-    @staticmethod
-    def _create_node(tx, node):
-        tx.run("MERGE (n:Node {name: $name})", name=node)
-
-    @staticmethod
-    def _create_relationship(tx, from_node, to_node):
-        tx.run(
-            """
-            MATCH (a:Node {name: $from_node}), (b:Node {name: $to_node})
-            MERGE (a)-[:FRIEND]->(b)
-            """,
-            from_node=from_node,
-            to_node=to_node,
-        )
-
     def read_adjacency_list_from_file(self, filepath):
+        """
+            Lee una lista de adyacencia desde un archivo y la convierte en un diccionario.
+
+            Parámetros:
+            - filepath (str): Ruta del archivo que contiene la lista de adyacencia.
+            
+            Funcionamiento:
+            - Cada línea del archivo debe tener el formato: Nodo: Nodo1, Nodo2, ...
+            - La función divide cada línea para extraer el nodo y sus nodos adyacentes, y los almacena en un diccionario.
+            
+            Retorno:
+            - adjacency_list (dict): Diccionario donde cada clave es un nodo y su valor es una lista de nodos adyacentes.
+            
+            Complejidad:
+            - O(N), donde N es el número de líneas en el archivo.
+        """
         adjacency_list = {}
         with open(filepath, "r") as file:
             for line in file:
@@ -312,3 +637,64 @@ class SocialNetwork:
                     edges = [edge.strip() for edge in parts[1].split(",")]
                     adjacency_list[node] = edges
         return adjacency_list
+
+    
+    def load_adjacency_list(self, adjacency_list):
+        """
+            Carga una lista de adyacencia en la base de datos Neo4j.
+            
+            Parámetros:
+            - adjacency_list (dict): Diccionario donde las claves son los nodos y los valores son listas de nodos conectados (aristas).
+            
+            Funcionamiento:
+            - Para cada nodo en la lista de adyacencia, crea el nodo en la base de datos (si no existe).
+            - Luego, crea las relaciones entre el nodo actual y cada nodo amigo en su lista de adyacencia.
+            
+            Complejidad:
+            - O(N + E), donde N es el número de nodos y E es el número de aristas.
+            - O(N) para la creación de nodos, ya que cada nodo se inserta una vez.
+            - O(E) para la creación de relaciones, ya que cada relación se inserta una vez.
+        """
+        with self.driver.session() as session:
+            for node, edges in adjacency_list.items():
+                session.write_transaction(self._create_node, node)
+                for edge in edges:
+                    session.write_transaction(self._create_relationship, node, edge)
+
+    @staticmethod
+    def _create_node(tx, node):
+        """
+            Crea un nodo en la base de datos Neo4j si no existe.
+
+            Parámetros:
+            - tx: Transacción de la base de datos.
+            - node (str): Nombre del nodo.
+
+            Complejidad:
+            - O(1) para cada nodo, ya que el `MERGE` verifica la existencia del nodo antes de insertarlo.
+        """
+        tx.run("MERGE (n:Node {name: $name})", name=node)
+
+    @staticmethod
+    def _create_relationship(tx, from_node, to_node):
+        """
+            Crea una relación de amistad entre dos nodos en la base de datos Neo4j.
+
+            Parámetros:
+            - tx: Transacción de la base de datos.
+            - from_node (str): Nodo de origen.
+            - to_node (str): Nodo de destino.
+
+            Complejidad:
+            - O(1) para cada relación, ya que `MERGE` verifica la existencia de la relación antes de insertarla.
+        """
+        tx.run(
+            """
+            MATCH (a:Node {name: $from_node}), (b:Node {name: $to_node})
+            MERGE (a)-[:FRIEND]->(b)
+            """,
+            from_node=from_node,
+            to_node=to_node,
+        )
+
+   
